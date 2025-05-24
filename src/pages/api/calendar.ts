@@ -1,5 +1,5 @@
 import type { APIRoute } from "astro";
-import { startOfDay, endOfDay, addMonths, getUnixTime } from "date-fns";
+import { startOfDay, endOfDay, addMonths, getUnixTime, format } from "date-fns";
 
 const GRIST_API_KEY = import.meta.env.GRIST_API_KEY;
 const GRIST_DOC_ID = import.meta.env.GRIST_DOC_ID;
@@ -35,6 +35,50 @@ async function getTransactions(): Promise<GristRecord[]> {
   }
 }
 
+const createICalendarContent = (events: any[]) => {
+  let icsContent = "BEGIN:VCALENDAR\nVERSION:2.0\n";
+  icsContent += "CALSCALE:GREGORIAN\n";
+  icsContent += "METHOD:PUBLISH\n";
+  icsContent += "PRODID:-//Your Organization//NONSGML Event//EN\n";
+  // ------------------------------------------------------------------
+  events.forEach((event) => {
+    icsContent += "BEGIN:VEVENT\n";
+    icsContent += `UID:${event.uid}@calendar\n`;
+    icsContent += `DTSTAMP:${formattedUtcDate(new Date())}\n`;
+    icsContent += `SEQUENCE:0\n`;
+    icsContent += `DTSTART:${event.start}\n`;
+    icsContent += `DTEND:${event.end}\n`;
+    icsContent += `SUMMARY:${event.summary}\n`;
+    icsContent += `DESCRIPTION: Transaction - ${event.description}\n`;
+    icsContent += "END:VEVENT\n";
+  });
+  icsContent += "END:VCALENDAR";
+
+  return icsContent;
+};
+
+const formattedUtcDate = (date: Date) => {
+  return format(date, "yyyyMMdd'T'HHmmss'Z'");
+};
+
+function generateIcalendar(trasactions: GristRecord[]) {
+  // define evets data
+  const events = trasactions.map((item: GristRecord) => {
+    const itemDateTimestamp = item.fields.date;
+    const itemDate = new Date(itemDateTimestamp * 1000);
+    return {
+      uid: item.id.toString(),
+      start: formattedUtcDate(itemDate),
+      end: formattedUtcDate(itemDate),
+      summary: item.fields.description,
+      description: `Amount: ${item.fields.amount}`,
+    };
+  });
+
+  // create iCalendar content
+  return createICalendarContent(events);
+}
+
 export const GET: APIRoute = async ({ request }) => {
   const now = new Date();
   const todayStart = startOfDay(now);
@@ -53,9 +97,13 @@ export const GET: APIRoute = async ({ request }) => {
     );
   });
 
-  return new Response(JSON.stringify(filteredTransactions), {
+  // Generate iCalendar
+  const icsContent = generateIcalendar(filteredTransactions);
+
+  return new Response(icsContent, {
     headers: {
-      "Content-Type": "application/json",
+      "Content-Type": "text/calendar",
+      "Content-Disposition": `attachment; filename=calendar.ics`,
     },
     status: 200,
     statusText: "OK",
