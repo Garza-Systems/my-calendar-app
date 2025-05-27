@@ -1,5 +1,5 @@
 import type { APIRoute } from "astro";
-import { startOfDay, endOfDay, addMonths, getUnixTime } from "date-fns";
+import { addMonths } from "date-fns";
 
 const GRIST_API_KEY = import.meta.env.GRIST_API_KEY;
 const GRIST_DOC_ID = import.meta.env.GRIST_DOC_ID;
@@ -37,19 +37,15 @@ async function getTransactions(): Promise<GristRecord[]> {
 
 export const GET: APIRoute = async ({ request }) => {
   const now = new Date();
-  const todayStart = startOfDay(now);
-  const twoMonthsLaterEnd = endOfDay(addMonths(now, 2));
-
-  // Formatea las fechas para la API de Grist
-  const startDateUnix = getUnixTime(todayStart);
-  const endDateUnix = getUnixTime(twoMonthsLaterEnd);
+  const todayStart = new Date(now.toISOString().split("T")[0]);
+  const twoMonthsLaterEnd = addMonths(todayStart, 2);
 
   const transactions = await getTransactions();
 
   const filteredTransactions = transactions.filter((item: GristRecord) => {
-    const itemDateTimestamp = item.fields.date;
+    const itemDateTimestamp = new Date(item.fields.date * 1000);
     return (
-      itemDateTimestamp >= startDateUnix && itemDateTimestamp <= endDateUnix
+      itemDateTimestamp >= todayStart && itemDateTimestamp <= twoMonthsLaterEnd
     );
   });
 
