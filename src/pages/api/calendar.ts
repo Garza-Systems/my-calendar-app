@@ -1,5 +1,5 @@
 import type { APIRoute } from "astro";
-import { startOfDay, endOfDay, addMonths, getUnixTime, format } from "date-fns";
+import { addMonths } from "date-fns";
 
 const GRIST_API_KEY = import.meta.env.GRIST_API_KEY;
 const GRIST_DOC_ID = import.meta.env.GRIST_DOC_ID;
@@ -13,6 +13,14 @@ interface GristRecord {
     amount: number;
     description: string;
   };
+}
+
+interface Event {
+  uid: string;
+  start: string;
+  end: string;
+  summary: string;
+  description: string;
 }
 
 async function getTransactions(): Promise<GristRecord[]> {
@@ -35,13 +43,13 @@ async function getTransactions(): Promise<GristRecord[]> {
   }
 }
 
-const createICalendarContent = (events: any[]) => {
+const createICalendarContent = (events: Event[]) => {
   let icsContent = "BEGIN:VCALENDAR\nVERSION:2.0\n";
   icsContent += "CALSCALE:GREGORIAN\n";
   icsContent += "METHOD:PUBLISH\n";
   icsContent += "PRODID:-//Your Organization//NONSGML Event//EN\n";
   // ------------------------------------------------------------------
-  events.forEach((event) => {
+  events.forEach((event: Event) => {
     icsContent += "BEGIN:VEVENT\n";
     icsContent += `UID:${event.uid}@calendar\n`;
     icsContent += `DTSTAMP:${formattedUtcDate(new Date())}\n`;
@@ -58,18 +66,24 @@ const createICalendarContent = (events: any[]) => {
 };
 
 const formattedUtcDate = (date: Date) => {
-  return format(date, "yyyyMMdd'T'HHmmss'Z'");
+  const year = date.getUTCFullYear();
+  const month = ("0" + (date.getUTCMonth() + 1)).slice(-2);
+  const day = ("0" + date.getUTCDate()).slice(-2);
+  return `${year}${month}${day}`;
 };
 
 function generateIcalendar(trasactions: GristRecord[]) {
   // define evets data
   const events = trasactions.map((item: GristRecord) => {
     const itemDateTimestamp = item.fields.date;
-    const itemDate = new Date(itemDateTimestamp * 1000);
+    
+    const startItemDate = new Date(itemDateTimestamp * 1000);
+    const endItemDate = new Date(startItemDate);
+
     return {
       uid: item.id.toString(),
-      start: formattedUtcDate(itemDate),
-      end: formattedUtcDate(itemDate),
+      start: formattedUtcDate(startItemDate),
+      end: formattedUtcDate(endItemDate),
       summary: item.fields.description,
       description: `Amount: ${item.fields.amount}`,
     };
@@ -81,19 +95,15 @@ function generateIcalendar(trasactions: GristRecord[]) {
 
 export const GET: APIRoute = async ({ request }) => {
   const now = new Date();
-  const todayStart = startOfDay(now);
-  const twoMonthsLaterEnd = endOfDay(addMonths(now, 2));
-
-  // Formatea las fechas para la API de Grist
-  const startDateUnix = getUnixTime(todayStart);
-  const endDateUnix = getUnixTime(twoMonthsLaterEnd);
+  const todayStart = new Date(now.toISOString().split("T")[0]);
+  const twoMonthsLaterEnd = addMonths(todayStart, 2);
 
   const transactions = await getTransactions();
 
   const filteredTransactions = transactions.filter((item: GristRecord) => {
-    const itemDateTimestamp = item.fields.date;
+    const itemDateTimestamp = new Date(item.fields.date * 1000);
     return (
-      itemDateTimestamp >= startDateUnix && itemDateTimestamp <= endDateUnix
+      itemDateTimestamp >= todayStart && itemDateTimestamp <= twoMonthsLaterEnd
     );
   });
 
