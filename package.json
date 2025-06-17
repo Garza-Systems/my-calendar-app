@@ -9,6 +9,8 @@
     "astro": "astro"
   },
   "dependencies": {
+    "@astrojs/node": "^9.2.2",
+    "@nodecfdi/cfdi-to-json": "^2.0.1",
     "astro": "^5.8.0",
     "date-fns": "^4.1.0"
   }
